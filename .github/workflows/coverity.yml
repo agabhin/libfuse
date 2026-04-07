@@ -1,0 +1,64 @@
+---
+name: Coverity Scan
+
+# Coverity Scan submits results to scan.coverity.com for review.
+# Requires COVERITY_SCAN_TOKEN and COVERITY_SCAN_EMAIL secrets.
+# Register at https://scan.coverity.com to obtain a project token.
+#
+# Only runs on push to master — secrets are not available to fork PRs.
+on:
+  push:
+    branches:
+      - master
+      - 'fuse-[0-9]+.[0-9]+*'
+
+permissions:
+  contents: read
+
+jobs:
+  coverity:
+    runs-on: ubuntu-latest
+    env:
+      COVERITY_PROJECT: libfuse
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc \
+            meson \
+            ninja-build \
+            python3 \
+            libudev-dev \
+            liburing-dev \
+            libnuma-dev \
+            curl
+
+      - name: Download Coverity Build Tool
+        run: |
+          curl -fsSL \
+            --data "token=${{ secrets.COVERITY_SCAN_TOKEN }}&project=${COVERITY_PROJECT}" \
+            https://scan.coverity.com/download/cxx/linux64 \
+            -o /tmp/cov-analysis.tar.gz
+          mkdir -p /opt/cov-analysis
+          tar -xzf /tmp/cov-analysis.tar.gz --strip-components=1 -C /opt/cov-analysis
+          echo "/opt/cov-analysis/bin" >> "$GITHUB_PATH"
+
+      - name: Setup build
+        run: meson setup builddir -Dexamples=false
+
+      - name: Build with cov-build
+        run: cov-build --dir cov-int ninja -C builddir
+
+      - name: Submit to Coverity Scan
+        run: |
+          tar -czf cov-int.tar.gz cov-int
+          curl -fsSL \
+            --form token="${{ secrets.COVERITY_SCAN_TOKEN }}" \
+            --form email="${{ secrets.COVERITY_SCAN_EMAIL }}" \
+            --form file=@cov-int.tar.gz \
+            --form version="${{ github.sha }}" \
+            --form description="Build ${{ github.run_number }} on ${{ github.ref_name }}" \
+            "https://scan.coverity.com/builds?project=${COVERITY_PROJECT}"
