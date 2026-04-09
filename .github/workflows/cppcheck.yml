@@ -1,0 +1,34 @@
+---
+name: Cppcheck
+on:
+  push:
+    branches:
+      - master
+      - 'fuse-[0-9]+.[0-9]+*'  # This will match branches like 3.17, 3.18, 4.0, etc.
+  pull_request:
+    branches:
+      - master
+      - 'fuse-[0-9]+.[0-9]+*'
+
+permissions:
+  contents: read
+
+jobs:
+  cppcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cppcheck
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run cppcheck
+        run: |
+          cppcheck --enable=warning,performance,portability \
+            --error-exitcode=1 \
+            --suppress=missingIncludeSystem \
+            --suppress=preprocessorErrorDirective \
+            --inline-suppr \
+            -I include/ \
+            -I lib/ \
+            --std=c11 \
+            lib/ util/ example/
